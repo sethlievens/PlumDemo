@@ -10,6 +10,16 @@ Instead of assigning one safety-stock rule to every product, the engine derives 
 
 ---
 
+## Project Highlights
+
+- Designed a SQL Server data warehouse with ~2.4 million fact rows.
+- Implemented inventory optimization using the Newsvendor model.
+- Built a phantom inventory detection system using historical sales patterns.
+- Tuned analytical stored procedures, reducing runtime by up to 84% and logical reads by 99.5%.
+- Verified all optimizations using execution plans and checksum-based correctness testing.
+
+---
+
 ## Results
 
 Across a 60-day forward simulation covering six stores:
