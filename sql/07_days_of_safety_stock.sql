@@ -1,15 +1,17 @@
--- 07_days_of_safety_stock.sql
--- derived_service_level is a CYCLE service level (P(no stockout within one
--- replenishment cycle)), not an in-stock rate -- it does not belong on a
--- slide next to a metric like realized in-stock rate, it reads as "we plan
--- to be out of stock 43% of the time" for DELI. days_of_safety_stock
--- (safety_stock_units / daily velocity) is the physical, chart-safe number
--- instead: how many days of average demand the safety-stock portion alone
--- covers.
---
--- Idempotent: ALTER TABLE guarded by column-existence check; proc calls are
--- idempotent by construction (each DELETEs its own @output_scenario_key's
--- rows first).
+/*
+===============================================================================
+Add Days of Safety Stock Metric
+===============================================================================
+
+Adds a physical inventory metric for reporting.
+
+Service level represents the probability of avoiding a stockout during a
+replenishment cycle and can be misleading when presented as an in-stock rate.
+
+Days of safety stock translates the model output into an operational metric:
+how many days of average demand the safety stock covers.
+===============================================================================
+*/
 
 USE PlumDemo;
 GO
