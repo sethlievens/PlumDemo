@@ -1,11 +1,15 @@
--- 04_dim_scenario_display.sql
--- dim_scenario's names are project-internal jargon ("Optimal Par",
--- "Conservative Par z=1.65"). Rename to what a grocery exec reads cold, and
--- add sort_order (slicer ordering) + include_in_report (drives a clean
--- two-button Current-vs-Engine slicer, hiding the diagnostic/strawman rows).
---
--- Idempotent: UPDATEs are unconditional re-assignments (safe to re-run),
--- ALTER TABLE is guarded by a column-existence check.
+/*
+===============================================================================
+Scenario Reporting Labels
+===============================================================================
+
+Adds reporting metadata to dim_scenario.
+
+The scenario dimension contains both user-facing scenarios and diagnostic
+experiments. Sort order and report visibility allow Power BI to present a
+clean executive view while preserving analytical scenarios.
+===============================================================================
+*/
 
 USE PlumDemo;
 GO
