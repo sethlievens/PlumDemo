@@ -86,4 +86,4 @@ I built this with Claude Code as an engineering partner. I set the problem, defi
 
 SQL Server 2022 in Docker, Python 3.12 with pandas and numpy for the data pipeline and simulation, and Power BI for the executive views. The pipeline is a set of numbered scripts in `python/`, the schema and stored procedures are in `sql/`, and the findings are written up in `docs/`.
 
-Power BI report: TODO, add public report link.
+Power BI report: [https://app.powerbi.com/view?r=eyJrIjoiMzcxMWI5M2YtMGIxZi00MDgyLWFlN2QtNDk2NTI1YjU5NjM2IiwidCI6ImQzNDJlM2MzLTliMDgtNGQyNi04Nzg4LWJiMzA0YjE5YjRiNSJ9&embedImagePlaceholder=true](https://app.powerbi.com/view?r=eyJrIjoiMzcxMWI5M2YtMGIxZi00MDgyLWFlN2QtNDk2NTI1YjU5NjM2IiwidCI6ImQzNDJlM2MzLTliMDgtNGQyNi04Nzg4LWJiMzA0YjE5YjRiNSJ9&embedImagePlaceholder=true)
