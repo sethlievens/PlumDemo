@@ -1,15 +1,63 @@
--- PlumDemo schema, per docs/SCHEMA.md.
--- Idempotent: every object is DROP IF EXISTS'd before create, safe to re-run.
---
--- ROUND 1 INDEXING ONLY -- DELIBERATE.
--- Every table gets nothing but a clustered PK on its surrogate identity
--- column. No nonclustered indexes, no foreign keys, no filtered indexes.
--- This is intentional: we want a genuinely bad execution plan (scans, no
--- seek paths, no columnstore on the big fact tables) to capture as the
--- "before" picture. Round 2 adds the real indexing (columnstore on
--- fact_sales, covering NC on store/item/date, filtered index on promo) and
--- we capture before/after plans as artifacts. Don't "fix" this file to be
--- fast -- that's the point of round 2, not round 1.
+/*
+===============================================================================
+PlumDemo Database Schema
+===============================================================================
+
+Creates the data model used by the grocery demand planning engine.
+
+The schema intentionally starts with Round 1 indexing:
+    • Clustered primary keys only
+    • No supporting indexes
+    • No optimized fact table structures
+
+This establishes a baseline workload before performance tuning. The optimized
+indexing strategy is applied separately in the Round 2 tuning scripts.
+===============================================================================
+*/
+
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.databases
+    WHERE name = 'PlumDemo'
+)
+BEGIN
+    PRINT 'Creating database PlumDemo';
+
+    EXEC('CREATE DATABASE PlumDemo');
+END
+GO
+
+
+USE PlumDemo;
+GO
+
+
+/*
+===============================================================================
+Drop Existing Objects
+===============================================================================
+*/
+
+DROP TABLE IF EXISTS dbo.frontier_dollar;
+DROP TABLE IF EXISTS dbo.frontier_curve;
+DROP TABLE IF EXISTS dbo.detection_log;
+DROP TABLE IF EXISTS dbo.phantom_events;
+DROP TABLE IF EXISTS dbo.par_levels;
+DROP TABLE IF EXISTS dbo.fact_lost_sales;
+DROP TABLE IF EXISTS dbo.fact_waste;
+DROP TABLE IF EXISTS dbo.fact_receipts;
+DROP TABLE IF EXISTS dbo.fact_inventory_snap;
+DROP TABLE IF EXISTS dbo.fact_sales;
+DROP TABLE IF EXISTS dbo.dim_spoilage_calibration;
+DROP TABLE IF EXISTS dbo.dim_scenario;
+DROP TABLE IF EXISTS dbo.dim_vendor;
+DROP TABLE IF EXISTS dbo.dim_date;
+DROP TABLE IF EXISTS dbo.dim_item;
+DROP TABLE IF EXISTS dbo.dim_department;
+DROP TABLE IF EXISTS dbo.dim_store;
+GO
 
 IF NOT EXISTS (SELECT 1 FROM sys.databases WHERE name = 'PlumDemo')
 BEGIN
