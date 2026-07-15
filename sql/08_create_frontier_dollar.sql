@@ -1,18 +1,21 @@
--- 08_create_frontier_dollar.sql
--- Dollar-denominated ordering-cost frontier from the forward sim, per
--- family -- see python/14_frontier_dollar_sweep.py. Supersedes the
--- DELI-only dbo.frontier_deli (dropped below): once the sweep covers more
--- than one family, a table named after one of them is a trap for whoever
--- reads the Power BI model. NOT the same thing as dbo.frontier_curve (the
--- backfill calibration sweep, units/% -- a different question).
---
--- The z sweep deliberately extends NEGATIVE for short-shelf-life families:
--- negative z = par below expected demand = deliberate under-production,
--- which is the textbook newsvendor answer whenever the critical ratio
--- drops below 0.5 (overstock cost exceeds understock cost).
---
--- Idempotent: DROP TABLE IF EXISTS + CREATE, like every table in this
--- project (DDL duplicated in 01_schema.sql for a from-scratch rebuild).
+/*
+===============================================================================
+Create Dollar Cost Frontier Table
+===============================================================================
+
+Creates the table used for the forward simulation ordering-cost analysis.
+
+This frontier evaluates the tradeoff between:
+    • Spoilage cost
+    • Lost sales cost
+    • Inventory carrying cost
+
+Unlike frontier_curve, which evaluates operational inventory metrics, this
+table represents dollar-based optimization results.
+
+Idempotent: safe to rerun.
+===============================================================================
+*/
 
 USE PlumDemo;
 GO
