@@ -4,6 +4,25 @@ This is a demand engine that decides how much of each item a grocery store shoul
 
 "Total cost of ordering" here means the three things bad ordering actually costs you: margin lost when you run out, shrink when food spoils, and the carrying cost of the stock sitting on the shelf.
 
+<img width="1536" height="1024" alt="newsvendor-problem" src="https://github.com/user-attachments/assets/158096e8-f5e5-4457-9096-e48474ed48e8" />
+
+## What the engine does
+
+The core idea is the newsvendor problem in plain terms. A stockout costs you the margin on the sale you missed, because you never bought that unit. Spoilage costs you the whole unit, because you did buy it and then threw it out. So how deep you can afford to stock an item comes down to two things: how much you make per unit, and how long it survives on the shelf. High margin and long shelf life mean you can carry a big cushion. Thin margin and a two-day shelf life mean you can barely carry any.
+
+The engine works this out per item and it shows up cleanly if you look at how many days of extra demand each family's safety stock covers:
+
+| family | shelf life | margin per unit | days of safety stock |
+|---|---|---|---|
+| Beverages | 270 days | $0.54 | 38.0 |
+| Grocery | 365 days | $1.07 | 11.8 |
+| Dairy | 14 days | $0.85 | 0.0 |
+| Bakery | 2 days | $1.38 | -0.4 |
+| Deli | 2 days | $1.89 | -0.7 |
+| Produce | 4 days | $0.32 | -1.9 |
+
+The surprising row is Deli, and it is not a rounding artifact. Its safety stock is negative, which means the engine deliberately stocks Deli below expected demand. For fresh prepared food with a two-day shelf life, spoiling a unit costs more than the margin you would have earned selling it, so the profit-maximizing move is to plan to sell out and accept a few missed sales rather than throw food away. Produce goes further in the same direction because its margin is the thinnest in the store.
+
 ## Query tuning
 
 This is the part most worth reading, so it goes first.
@@ -23,34 +42,6 @@ The third proc, usp_CalculateVelocity, is unchanged, and that is the honest answ
 
 Full write-up with the plan forensics is in [docs/TUNING.md](docs/TUNING.md).
 
-## What the engine does
-
-The core idea is the newsvendor problem in plain terms. A stockout costs you the margin on the sale you missed, because you never bought that unit. Spoilage costs you the whole unit, because you did buy it and then threw it out. So how deep you can afford to stock an item comes down to two things: how much you make per unit, and how long it survives on the shelf. High margin and long shelf life mean you can carry a big cushion. Thin margin and a two-day shelf life mean you can barely carry any.
-
-The engine works this out per item and it shows up cleanly if you look at how many days of extra demand each family's safety stock covers:
-
-| family | shelf life | margin per unit | days of safety stock |
-|---|---|---|---|
-| Beverages | 270 days | $0.54 | 38.0 |
-| Grocery | 365 days | $1.07 | 11.8 |
-| Dairy | 14 days | $0.85 | 0.0 |
-| Bakery | 2 days | $1.38 | -0.4 |
-| Deli | 2 days | $1.89 | -0.7 |
-| Produce | 4 days | $0.32 | -1.9 |
-
-The surprising row is Deli, and it is not a rounding artifact. Its safety stock is negative, which means the engine deliberately stocks Deli below expected demand. For fresh prepared food with a two-day shelf life, spoiling a unit costs more than the margin you would have earned selling it, so the profit-maximizing move is to plan to sell out and accept a few missed sales rather than throw food away. Produce goes further in the same direction because its margin is the thinnest in the store.
-
-## Bugs found and fixed
-
-Finding these was the work, so they are worth listing.
-
-**Demand seeded off a promo-contaminated velocity.** The forward simulation seeded each item's demand from its raw trailing 28-day average. One Grocery item had been on promotion nearly every day of that window, selling up to 2,305 units a day against a clean baseline of 14.4. So the simulation started that item's "normal" demand at a promo spike, which is self-contradictory because the simulation holds promotions flat at their off state. Caught by tracing an item whose demand looked absurd, and fixed by seeding off the clean average that already excludes promo and stockout days.
-
-**Stale velocity on discontinued items.** The "most recent" velocity for an item had no floor on how old it could be. A Beverages item at store 1 got seeded at 145.7 units a day from a reading whose last real sale was seven months before the simulation even starts. Across the panel, 144 store-items out of 2,175, about 6.6%, had last sold more than 28 days before the start date. They were showing up as some of the biggest lost-revenue outliers. Fixed by dropping any store-item that had gone dark for more than 28 days.
-
-**The day-of-week index collapsed on promo-heavy days.** Deli's Friday index came out dead last at 0.37, even though Friday is genuinely the third-strongest sales day. The cause was that these Deli items are on promotion 93% of Fridays in the source data, and the index was built from promo-excluded sales, so excluding promo threw away almost every Friday and left an unrepresentative scrap. The simulation then generated almost no Friday demand while orders still arrived for it, and a two-day shelf life dumped the surplus into Saturday. The fix was recognizing that the level of demand and the shape of demand need different filters: the level should exclude promo so a spike does not inflate reorder sizes, but the day-of-week shape should keep promo, because the traffic on a busy Friday is real. After the fix, Deli Friday demand went from 2,131 units to 7,737 and Saturday shrink dropped from 33% to 4.9%.
-
-**Safety stock priced at the average spoilage rate instead of the tail rate.** Safety stock sits behind cycle stock in a first-in-first-out shelf, so it only ever sells on the unusual high-demand days, which means it spoils far more often than an average unit. The model was pricing its spoilage risk at the average rate. This one was caught by sweeping the actual cost objective across a range of stocking levels and noticing the engine's own recommended level sat 60% above the cost minimum it was supposed to be finding. Fixed with a per-family spoilage correction that was then validated by fitting it on three stores and checking it on the other three.
 
 ## What doesn't work, and why
 
@@ -70,8 +61,6 @@ The reframe is what makes it useful. Stop treating it as a detector and treat it
 
 ## Limitations
 
-Being straight about the edges of this.
-
 - The demand is real Favorita point-of-sale data, but the inventory layer, the on-hand balances and spoilage, is synthetic. No public grocery dataset publishes on-hand inventory, which is itself a big part of why this problem is hard to solve in the wild.
 - The simulation runs 60 days, but dry goods have 270 to 365 day shelf lives. Nothing in those families can physically spoil inside the window, so their carrying cost is understated here. You would need a longer horizon to see it.
 - Produce clears the bar by only $1,871, and it is capped. The spoilage probability in the model maxes out at 1.0, but produce's true optimum wants to stock even lower than "every safety unit spoils" allows, so roughly 30% of the available saving on produce is left on the table. The engine still wins there, but barely, and by less than it theoretically could.
@@ -80,7 +69,7 @@ Being straight about the edges of this.
 
 ## How it was built
 
-I built this with Claude Code as an engineering partner. I set the problem, defined the validation gates, and kept the burden of proof on the numbers, and Claude did a lot of the implementation and analysis against those gates. Several of the bugs above were caught precisely because a result looked plausible and still had to survive a check, the promo-contaminated demand, the collapsed Friday index, and the mispriced safety stock all came out of refusing to accept a number that looked fine on the surface.
+I built this with Claude Code. I set the problem, defined the validation gates, and kept the burden of proof on the numbers, and Claude did a lot of the implementation and analysis against those gates. The SQL and Power BI Report was created by me.
 
 ## Stack and how to run it
 
