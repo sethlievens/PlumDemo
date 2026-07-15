@@ -1,18 +1,15 @@
--- 03_add_par_level_service_metrics.sql
--- usp_RecommendParLevels computes the newsvendor critical ratio and the
--- resulting z per item, but only ever used them to size safety_stock_units
--- -- the ratio and z themselves were discarded, not persisted. That's the
--- headline number for the Power BI par-levels page (the engine deriving
--- ~99.5% service level for GROCERY vs ~85% for DELI from margin, carrying
--- cost and shelf life), and it wasn't queryable. This adds the three
--- columns to par_levels, updates the proc to persist them (see
--- sql/procs/usp_RecommendParLevels.sql and the new sql/procs/ufn_NormSDist.sql),
--- and re-runs the proc for all three par scenarios so existing rows pick up
--- the new values.
---
--- Idempotent: the ALTER TABLE is guarded by a column-existence check, safe
--- to re-run. The proc calls below are idempotent by construction (each
--- DELETEs its own @output_scenario_key's rows first).
+/*
+===============================================================================
+Add Par-Level Service Metrics
+===============================================================================
+
+Adds model outputs needed for reporting and analysis.
+
+The recommendation engine calculates the newsvendor critical ratio, safety
+stock sizing value, and implied service level. These metrics are persisted so
+Power BI can expose the model decisions behind each recommended par level.
+===============================================================================
+*/
 
 USE PlumDemo;
 GO
