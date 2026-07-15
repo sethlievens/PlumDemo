@@ -25,39 +25,28 @@ The surprising row is Deli, and it is not a rounding artifact. Its safety stock 
 
 ## Query tuning
 
-This is the part most worth reading, so it goes first.
+Indexing was surprisingly not the lever that made a difference in performance in this project.
 
 | proc | before | after | how |
 |---|---|---|---|
 | usp_RecommendParLevels | 14,994,509 reads, 38.1s | 77,559 reads, 5.9s | decorrelated an OUTER APPLY that re-ran a 1.8M-row aggregate 2,172 times |
 | usp_DetectPhantomInventory | 221,402 reads, 4.4s | 114,449 reads, 2.3s | materialized a windowed-expression filter the optimizer estimated at 1 row against 14,673 actual |
 
-The first attempt was the obvious one: add indexes, and when two procs got slower instead of faster, pin them back with hash join hints. It did essentially nothing. Reads on usp_RecommendParLevels moved 0.2%, on usp_DetectPhantomInventory 1.2%. That was the tell. When a "fix" leaves the read count unchanged, the plan did not actually change. The hint had just shoved the plan back to the same shape it already had, including whatever was slow about it in the first place. So the hints came out.
+The first attempt I added the obvious indexes. Upon testing, two of the stored procedures got slower instead of faster.
 
-With the hints gone, both real causes turned out to be the same species of problem: the optimizer was handed a wrong row-count estimate and planned accordingly. In usp_RecommendParLevels a correlated OUTER APPLY over a per-item aggregate made SQL Server recompute that whole aggregate once for every store-item, 2,172 times over. Rewriting it as a single LEFT JOIN computed once dropped reads by about 193x. In usp_DetectPhantomInventory the filter sat on a windowed expression, and a window function has no histogram to estimate from, so the optimizer guessed one row against fourteen thousand actual and nested-loop-seeked a 1.8M-row table 124,563 times. Materializing that intermediate result into a temp table gave it real statistics, and it picked a hash join on its own. In both cases, once the estimate was right, the optimizer found the good plan by itself.
+Both real causes turned out to be the same species of problem: the optimizer was handed a wrong row-count estimate and planned accordingly. In usp_RecommendParLevels a correlated OUTER APPLY over a per-item aggregate made SQL Server recompute that whole aggregate once for every store-item, 2,172 times over. Rewriting it as a single LEFT JOIN computed once dropped reads by about 193x. In usp_DetectPhantomInventory the filter sat on a windowed expression, and a window function has no histogram to estimate from, so the optimizer guessed one row against fourteen thousand actual and nested-loop-seeked a 1.8M-row table 124,563 times. Materializing that intermediate result into a temp table gave it real statistics, and it picked a hash join on its own. In both cases, once the estimate was right, the optimizer found the good plan by itself.
 
-On the way there, usp_DetectPhantomInventory got the cheapest hypothesis first: UPDATE STATISTICS WITH FULLSCAN on the suspect table. It changed the read count by exactly zero, from 3,811,333 to 3,811,381. That is what ruled out stale statistics and proved the estimate was structurally wrong rather than just out of date. No hints and no new indexes were needed for either win, and both were checked byte for byte against the original output by checksum before and after.
+On the way there, usp_DetectPhantomInventory got the cheapest hypothesis first: UPDATE STATISTICS WITH FULLSCAN on the suspect table. It changed the read count by exactly zero, from 3,811,333 to 3,811,381. That is what ruled out stale statistics and proved the estimate was structurally wrong rather than just out of date. No new indexes were needed for either win.
 
-The third proc, usp_CalculateVelocity, is unchanged, and that is the honest answer. It is not read-bound, it is write-bound: every run deletes and rebuilds all 1.8 million rows of its output table. No index gets under that. The real fix is to refresh it incrementally instead of rebuilding the whole thing each time, and that is a design change, not an indexing change, so it was left alone rather than dressed up.
-
-Full write-up with the plan forensics is in [docs/TUNING.md](docs/TUNING.md).
-
+The third proc, usp_CalculateVelocity, is unchanged because of how it is built. It is not read-bound, it is write-bound: every run deletes and rebuilds all 1.8 million rows of its output table. No index gets under that. The real fix is to refresh it incrementally instead of rebuilding the whole thing each time, and that is a design change, not an indexing change, so it was left alone rather than dressed up.
 
 ## What doesn't work, and why
 
-The phantom inventory detector, the piece that tries to flag items where the system thinks there is stock but the shelf is empty, does not work as a yes-or-no detector, and it is worth being blunt about that.
+One of the main goals of this project was to create a phantom inventory detector. A common problem with grocery stores is that the database says their are products on the shelf, but in reality the shelf is empty. I thought there could be a way to solve this by finding products that had not been sold for at least 3 days at one store but was sold at other similar stores. In the end, it did not work as a yes-or-no detector.
 
-The reason is the base rate. There are 1,958 real phantom events hidden in 1,825,182 store-item-days, which is about 0.1%. At that rarity any fixed global trigger drowns in false alarms. Take a simple global rule, three straight days of zero sales on an item that normally sells around two a day:
+There are 1,958 real phantom events hidden in 1,825,182 store-item-days, which is about 0.1%. At that rarity any fixed global trigger drowns in false alarms. Optimistically, for every 1 real event, the detector would find 4 false positives.
 
-```
-P(zero sales on a 2-a-day item)     = 13.5%
-P(three zero-sale days in a row)     = 0.248%
-expected false alarms across panel   = 1,825,182 x 0.00248  =  about 4,500
-```
-
-And that is the optimistic version. The detector fights exactly this by setting the bar per item, flagging only when an item's quiet streak runs longer than its own normal quiet spell, so a naturally lumpy item is not held to the same rule as a reliable daily seller. It helps, but only so much: the best honest score as a classifier is still an F1 of 0.26. You cannot threshold your way out of a problem where the thing you are looking for is one in a thousand.
-
-The reframe is what makes it useful. Stop treating it as a detector and treat it as a ranked shortlist. Each morning it hands a store manager the 25 items most likely to be phantom, and about 21% of that list is real. A manager can eyeball a shelf in 30 seconds, so a list that is one-in-five worth checking is genuinely worth walking. What would actually make it a real detector is ground-truth that sales data simply does not contain: cycle counts, shelf cameras, RFID. That is not a gap in this project, it is the reason chains like Walmart and Kroger spend real money on exactly those tools.
+Though it did not work as expected, the detector could still be useful if it's treated more as a ranked shortlist. Each morning it hands a store manager the 25 items most likely to be phantom, and about 21% of that list is real. A manager can eyeball a shelf in 30 seconds, so a list that is one-in-five worth checking is genuinely worth walking. What would actually make it a real detector is ground-truth that sales data simply does not contain: cycle counts, shelf cameras, RFID. That is not a gap in this project, it is the reason chains like Walmart and Kroger spend real money on exactly those tools.
 
 ## Limitations
 
@@ -69,7 +58,7 @@ The reframe is what makes it useful. Stop treating it as a detector and treat it
 
 ## How it was built
 
-I built this with Claude Code. I set the problem, defined the validation gates, and kept the burden of proof on the numbers, and Claude did a lot of the implementation and analysis against those gates. The SQL and Power BI Report was created by me.
+The data and engine was built with Claude Code. I set the problem, defined the validation gates, and kept the burden of proof on the numbers, and Claude did a lot of the implementation and analysis against those gates. The SQL and Power BI Report was created by me.
 
 ## Stack and how to run it
 
