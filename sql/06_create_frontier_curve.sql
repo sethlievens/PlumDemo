@@ -1,13 +1,14 @@
--- 06_create_frontier_curve.sql
--- artifacts/frontier.parquet (the backfill-calibration buffer sweep behind
--- docs/FINDINGS.md's waste%/top-up% analysis) only lives on disk. Creates
--- the table Power BI reads it from over the same SQL connection as
--- everything else. Loaded by python/13_load_frontier.py.
---
--- Idempotent: DROP TABLE IF EXISTS + CREATE, like every table in
--- 01_schema.sql (this DDL is duplicated there for a from-scratch rebuild;
--- this standalone file is so it can be created now without dropping and
--- reloading every other table in the database).
+/*
+===============================================================================
+Create Frontier Curve Table
+===============================================================================
+
+Creates the SQL table used by Power BI for the inventory optimization frontier.
+
+The data originates from the calibration sweep generated outside SQL and is
+loaded separately.
+===============================================================================
+*/
 
 USE PlumDemo;
 GO
