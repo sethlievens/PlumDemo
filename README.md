@@ -1,4 +1,4 @@
-# Plum Market Demand Engine
+# Grocery Store Demand Engine
 
 A demand planning engine for grocery retail that recommends optimal order-up-to (par) levels from item-level economics and validates them with a forward simulation.
 
