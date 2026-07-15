@@ -1,13 +1,17 @@
--- 02_extend_dim_date.sql
--- dim_date topped out at 2017-08-15 while fact_sales/fact_lost_sales run
--- through 2017-10-14 (forward-sim window). Any fact row past 2017-08-15 has
--- no dim_date match -- Power BI drops those rows on the join silently, no
--- error, numbers just come out short. Extend the date spine through
--- 2017-10-31 (a buffer past the sim end) and then verify zero orphans on
--- every fact x dim pair.
---
--- Idempotent: the INSERT only adds dates past the current MAX(date), safe
--- to re-run.
+/*
+===============================================================================
+Extend Date Dimension
+===============================================================================
+
+Extends dim_date to cover the full analysis and forward simulation period.
+
+The original date dimension ended before the fact tables, causing unmatched
+date joins in reporting layers. This script adds missing dates through the end
+of the simulation buffer period.
+
+Idempotent: only inserts dates after the current maximum date.
+===============================================================================
+*/
 
 USE PlumDemo;
 GO
