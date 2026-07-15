@@ -1,16 +1,14 @@
--- 05_display_names.sql
--- Friendly display columns for Power BI axis/legend labels. dim_item.family
--- and dim_store.store_type/store_nbr are fine for SQL but read as
--- project-internal jargon or bare codes on a chart. These are ADDITIONAL
--- columns -- family/store_type/store_nbr stay as-is for joins and existing
--- logic, display_family/display_name are purely presentation.
---
--- Note: this demo's item catalog uses "GROCERY" (not "GROCERY I"/"GROCERY II"
--- as in the full Favorita dataset) -- confirmed against dbo.dim_item before
--- writing this. Mapped accordingly.
---
--- Idempotent: ALTER TABLE guarded by column-existence check, UPDATEs are
--- unconditional re-assignments.
+/*
+===============================================================================
+Add Display Labels
+===============================================================================
+
+Adds presentation-friendly labels for Power BI reporting.
+
+Original database attributes are preserved for joins and calculations. These
+columns exist only to improve chart labels and report readability.
+===============================================================================
+*/
 
 USE PlumDemo;
 GO
